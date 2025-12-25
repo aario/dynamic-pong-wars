@@ -4,6 +4,10 @@ A playable, customizable version of [Pong Wars](https://github.com/vnglst/pong-w
 
 **Play it now:** [markodenic.tech/dynamic-pong-wars](https://markodenic.tech/dynamic-pong-wars)
 
+
+https://github.com/user-attachments/assets/81af5c35-ec23-45bb-af35-b90ce8112ffc
+
+
 ---
 
 ### Features
@@ -23,5 +27,6 @@ npx serve
 ---
 
 ### Credit
-Built by [Marko Denic](https://markodenic.tech)  
+Built by [Marko Denic](https://markodenic.tech)
+Improved by [Aario Shahbany](https://aario.info)  
 Inspired by [Koen van Gilst](https://github.com/vnglst) and his original [Pong Wars](https://github.com/vnglst/pong-wars).
