@@ -104,14 +104,70 @@
       display: block;
     }
 
-    #scoreDisplay {
-      padding: 15px;
-      font-size: 16px;
+    #scorePanel {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 200px;
+      background: rgba(0, 0, 0, 0.7); /* Semi-transparent black */
+      backdrop-filter: blur(4px); /* Optional: nice blur effect */
       color: white;
-      background: black;
-      border-bottom-left-radius: 6px;
-      border-bottom-right-radius: 6px;
-      display: inline-block;
+      padding: 10px;
+      border-radius: 8px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      transition: height 0.3s ease;
+      overflow: hidden;
+    }
+
+    #scorePanel.collapsed {
+      height: 30px; /* Only show header when collapsed */
+    }
+
+    #scoreHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: bold;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #scoreToggleBtn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    #scoreDisplay {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 14px;
+      font-weight: bold;
+      overflow-y: auto;
+      max-height: 400px;
+    }
+
+    /* Hide scrollbar for cleaner look */
+    #scoreDisplay::-webkit-scrollbar {
+      width: 4px;
+    }
+    #scoreDisplay::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.3);
     }
 
     footer {
@@ -126,6 +182,13 @@
   </style>
 </head>
 <body>
+<div id="scorePanel">
+  <div id="scoreHeader">
+    <span>Leaderboard</span>
+    <button id="scoreToggleBtn">−</button>
+  </div>
+  <div id="scoreDisplay"></div>
+</div>
 <div id="resetBtn">
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -155,20 +218,11 @@
 </div>
 
 <div id="configPanel">
-  <label>
-    Day color:
-    <input type="color" id="dayColorInput" value="#FFFFFF"/>
-  </label>
-  <label>
-    Night color:
-    <input type="color" id="nightColorInput" value="#000000"/>
-  </label>
 </div>
 
 <main>
   <div>
     <canvas id="gameCanvas" width="600" height="600"></canvas>
-    <div id="scoreDisplay"></div>
   </div>
 </main>
 
@@ -182,24 +236,64 @@
   const canvas = document.querySelector("#gameCanvas");
   const ctx = canvas.getContext("2d");
   const scoreDisplay = document.querySelector("#scoreDisplay");
-  const dayColorInput = document.querySelector("#dayColorInput");
-  const nightColorInput = document.querySelector("#nightColorInput");
   const configBtn = document.querySelector("#configBtn");
   const configPanel = document.querySelector("#configPanel");
   const resetBtn = document.querySelector("#resetBtn");
   const playPauseBtn = document.querySelector("#playPauseBtn");
   const playIcon = playPauseBtn.querySelector(".play-icon");
   const pauseIcon = playPauseBtn.querySelector(".pause-icon");
+  const scorePanel = document.querySelector("#scorePanel");
+  const scoreToggleBtn = document.querySelector("#scoreToggleBtn");
 
   const TILE_SIZE = 25;
   const MAX_SPEED = 10;
   const MIN_SPEED = 5;
   const ACCELERATION = 0.1;
+  const titles = [
+    "Emperor", "Empress", "Warlord", "High Priest", "Grand Vizier", "Star Warden",
+    "Abyssal Lord", "Void Walker", "Pixel Paladin", "Byte Baron", "Quantum Sage",
+    "Nebula Duke", "Iron Thane", "Sun Eater", "Moon Watcher", "Chrono Master",
+    "Archon", "Sovereign", "Dread Knight", "Shah", "Amir", "Sultan"
+  ];
 
-  let dayColor = "#FFFFFF";
-  let nightColor = "#000000";
-  let dayScore = 0;
-  let nightScore = 0;
+  const syllables = [
+    "zor", "bax", "quu", "vex", "traz", "lim", "puk", "ha", "sha", "gu",
+    "sam", "ov", "xyl", "fon", "dru", "kraz", "ni", "lo", "wa", "ke",
+    "xar", "tus", "mon", "rak", "zi", "bo", "fe", "ca", "dor", "mu"
+  ];
+
+  function generateFantasyName() {
+    const title = titles[Math.floor(Math.random() * titles.length)];
+    const numSyllables = 2 + Math.floor(Math.random() * 3); // 2 to 4 syllables
+    let name = "";
+    for (let i = 0; i < numSyllables; i++) {
+      name += syllables[Math.floor(Math.random() * syllables.length)];
+    }
+    // Capitalize the name part
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    return `${title} ${name}`;
+  }
+  const getRandomColor = () => {
+    return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+  };
+
+  const MIN_PLAYER_COUNT = 2;
+  const MAX_PLAYER_COUNT = 10;
+
+  // Initialize with a random number between MIN and MAX
+  let PLAYER_COUNT = Math.floor(Math.random() * (MAX_PLAYER_COUNT - MIN_PLAYER_COUNT + 1)) + MIN_PLAYER_COUNT;
+
+  let players = [];
+  let balls = [];
+
+  for (let i = 0; i < PLAYER_COUNT; i++) {
+    players.push({
+      id: i,
+      name: generateFantasyName(),
+      color: getRandomColor(),
+      score: 0
+    });
+  }
   let iteration = 0;
   let isPlaying = true;
   let animationFrameId = null;
@@ -207,36 +301,20 @@
   const gridWidth = canvas.width / TILE_SIZE;
   const gridHeight = canvas.height / TILE_SIZE;
 
-  const ownership = new Array(gridWidth * gridHeight).fill(0).map((_, idx) =>
-                                                                      idx % gridWidth < gridWidth / 2 ? 0 : 1
-  );
+  const ownership = new Array(gridWidth * gridHeight).fill(0).map((_, idx) => {
+    const col = idx % gridWidth;
+    // Divide grid width evenly by player count
+    return Math.floor(col / (gridWidth / PLAYER_COUNT));
+  });
 
   const grid = new Array(gridWidth * gridHeight).fill(0).map((_, idx) => ({
     x: (idx % gridWidth) * TILE_SIZE,
     y: Math.floor(idx / gridWidth) * TILE_SIZE,
     get color() {
-      return ownership[idx] === 0 ? dayColor : nightColor;
+      // Look up the color dynamically from the players array
+      return players[ownership[idx]].color;
     }
   }));
-
-  const balls = [
-    {
-      x: canvas.width / 4,
-      y: canvas.height / 2,
-      vx: 8,
-      vy: -8,
-      get color() { return nightColor; },
-      get targetColor() { return dayColor; }
-    },
-    {
-      x: (canvas.width / 4) * 3,
-      y: canvas.height / 2,
-      vx: -8,
-      vy: 8,
-      get color() { return dayColor; },
-      get targetColor() { return nightColor; }
-    }
-  ];
 
   function toggleConfigPanel() {
     configPanel.classList.toggle("visible");
@@ -255,7 +333,33 @@
   }
 
   function updateBackground() {
-    document.body.style.background = `linear-gradient(to bottom, ${nightColor} 0%, ${dayColor} 100%)`;
+    const totalScore = players.reduce((sum, p) => sum + p.score, 0);
+
+    // If game just started (score 0), distribute evenly
+    if (totalScore === 0) {
+      const colors = players.map(p => p.color).join(', ');
+      document.body.style.background = `linear-gradient(to bottom, ${colors})`;
+      return;
+    }
+
+    let gradientParts = [];
+    let currentPercent = 0;
+
+    players.forEach(p => {
+      // Calculate the size of this player's share (0 to 100)
+      const share = (p.score / totalScore) * 100;
+
+      // Calculate the CENTER point of this player's territory
+      const centerPoint = currentPercent + (share / 2);
+
+      // Add a single color stop at the center
+      // The browser will automatically fade between these points
+      gradientParts.push(`${p.color} ${centerPoint.toFixed(2)}%`);
+
+      currentPercent += share;
+    });
+
+    document.body.style.background = `linear-gradient(to bottom, ${gradientParts.join(', ')})`;
   }
 
   function drawTile(tile) {
@@ -263,12 +367,57 @@
     ctx.fillRect(tile.x, tile.y, TILE_SIZE, TILE_SIZE);
   }
 
+  const getRingColor = (hex) => {
+    // Remove the hash if it exists
+    hex = hex.replace('#', '');
+
+    // Parse the R, G, B values
+    let r = parseInt(hex.substring(0, 2), 16);
+    let g = parseInt(hex.substring(2, 4), 16);
+    let b = parseInt(hex.substring(4, 6), 16);
+
+    // Calculate luminance (perceived brightness)
+    // Formula: 0.299*R + 0.587*G + 0.114*B
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+
+    // If luminance > 160 (bright), darken by subtracting. 
+    // Otherwise, lighten by adding.
+    const change = luminance > 160 ? -80 : 80;
+
+    // Apply change and clamp values between 0 and 255
+    r = Math.min(255, Math.max(0, r + change));
+    g = Math.min(255, Math.max(0, g + change));
+    b = Math.min(255, Math.max(0, b + change));
+
+    // Convert back to Hex
+    const toHex = (c) => c.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  };
+
   function drawBall(ball) {
+    ctx.save(); // Save settings so shadow doesn't affect the grid
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, TILE_SIZE / 2, 0, Math.PI * 2);
+
+    // Add a dark shadow behind the ball
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+
     ctx.fillStyle = ball.color;
     ctx.fill();
+
+    // Add a thick white border
+    ctx.shadowColor = "transparent"; // Turn off shadow for the border
+    ctx.lineWidth = 3;
+
+    ctx.strokeStyle = getRingColor(ball.color);
+    ctx.stroke();
+
+
     ctx.closePath();
+    ctx.restore(); // Restore settings
   }
 
   function detectCollision(ball) {
@@ -290,9 +439,9 @@
           ballRect.left < tileRect.right &&
           ballRect.bottom > tileRect.top &&
           ballRect.top < tileRect.bottom &&
-          ownership[idx] !== (ball === balls[0] ? 0 : 1)
+          ownership[idx] !== ball.ownerId
       ) {
-        ownership[idx] = ball === balls[0] ? 0 : 1;
+        ownership[idx] = ball.ownerId;
         const dx = ball.x - (tile.x + TILE_SIZE / 2);
         const dy = ball.y - (tile.y + TILE_SIZE / 2);
         if (Math.abs(dx) > Math.abs(dy)) {
@@ -334,68 +483,161 @@
   }
 
   function resetGame() {
-    ownership.forEach((_, idx) => {
-      ownership[idx] = idx % gridWidth < gridWidth / 2 ? 0 : 1;
+    // 1. Re-initialize Players Array
+    players = [];
+    for (let i = 0; i < PLAYER_COUNT; i++) {
+      players.push({
+        id: i,
+        name: generateFantasyName(),
+        color: getRandomColor(),
+        score: 0
+      });
+    }
+
+    // 2. Re-initialize Balls Array
+    balls = players.map(player => {
+      return {
+        x: (canvas.width / PLAYER_COUNT) * player.id + (canvas.width / PLAYER_COUNT / 2),
+        y: canvas.height / 2,
+        vx: (Math.random() > 0.5 ? 1 : -1) * 8,
+        vy: (Math.random() > 0.5 ? 1 : -1) * 8,
+        ownerId: player.id, 
+        get color() { return players[this.ownerId].color; }
+      };
     });
-    balls[0].x = canvas.width / 4;
-    balls[0].y = canvas.height / 2;
-    balls[0].vx = 8;
-    balls[0].vy = -8;
-    balls[1].x = (canvas.width / 4) * 3;
-    balls[1].y = canvas.height / 2;
-    balls[1].vx = -8;
-    balls[1].vy = 8;
+
+    // 3. Reset Grid Ownership based on new PLAYER_COUNT
+    ownership.forEach((_, idx) => {
+      const col = idx % gridWidth;
+      // Divide grid width evenly by player count
+      ownership[idx] = Math.floor(col / (gridWidth / PLAYER_COUNT));
+      // Clamp to ensure we don't go out of bounds (just in case of rounding errors)
+      ownership[idx] = Math.min(ownership[idx], PLAYER_COUNT - 1);
+    });
+
+    // 4. Update UI
+    createConfigInputs();
+    updateBackground();
+
     iteration = 0;
     if (!isPlaying) togglePlayPause();
   }
 
+  function createConfigInputs() {
+    configPanel.innerHTML = ''; // Clear existing
+
+    // --- Add Player Count Control ---
+    const countWrapper = document.createElement('div');
+    countWrapper.style.marginBottom = "20px";
+    countWrapper.style.paddingBottom = "10px";
+    countWrapper.style.borderBottom = "1px solid #ddd";
+
+    const countLabel = document.createElement('label');
+    countLabel.textContent = `Players (${MIN_PLAYER_COUNT}-${MAX_PLAYER_COUNT}):`;
+
+    const countInput = document.createElement('input');
+    countInput.type = "number";
+    countInput.min = MIN_PLAYER_COUNT;
+    countInput.max = MAX_PLAYER_COUNT;
+    countInput.value = PLAYER_COUNT;
+
+    const restartBtn = document.createElement('button');
+    restartBtn.textContent = "New Game";
+    restartBtn.style.marginTop = "5px";
+    restartBtn.style.cursor = "pointer";
+    restartBtn.addEventListener('click', () => {
+      let val = parseInt(countInput.value);
+      // Validate input
+      if (val < MIN_PLAYER_COUNT) val = MIN_PLAYER_COUNT;
+      if (val > MAX_PLAYER_COUNT) val = MAX_PLAYER_COUNT;
+
+      PLAYER_COUNT = val;
+      resetGame(); // This will trigger the full reset with new count
+    });
+
+    countLabel.appendChild(countInput);
+    countWrapper.appendChild(countLabel);
+    countWrapper.appendChild(restartBtn);
+    configPanel.appendChild(countWrapper);
+    // --------------------------------
+
+    // Generate Color Pickers for current players
+    players.forEach(player => {
+      const label = document.createElement('label');
+      label.style.marginBottom = "10px"; 
+      label.textContent = `${player.name} Color: `;
+
+      const input = document.createElement('input');
+      input.type = "color";
+      input.value = player.color;
+      input.addEventListener("input", (e) => {
+        player.color = e.target.value;
+        updateBackground();
+      });
+
+      label.appendChild(input);
+      configPanel.appendChild(label);
+    });
+  }
+
   function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    dayScore = 0;
-    nightScore = 0;
+    // Reset scores
+    players.forEach(p => p.score = 0);
+
+    // Calculate scores
     grid.forEach((tile, idx) => {
       drawTile(tile);
-      if (ownership[idx] === 0) dayScore++;
-      if (ownership[idx] === 1) nightScore++;
+      if (players[ownership[idx]]) {
+        players[ownership[idx]].score++;
+      }
     });
-    scoreDisplay.textContent = `Day: ${dayScore} | Night: ${nightScore}`;
+
+    // Sort players by score (Highest first)
+    // We create a copy [...players] so we don't mess up the game logic order
+    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
+    // Update Display
+    scoreDisplay.innerHTML = sortedPlayers.map(p => {
+      const ringColor = getRingColor(p.color);
+      return `
+        <div style="
+          color: ${ringColor}; 
+          -webkit-text-stroke: 1px ${p.color}; 
+          margin-bottom: 4px;
+        ">
+          ${p.name}: ${p.score}
+        </div>
+      `;
+    }).join('');
+
+    // Update background to match scores
+    updateBackground();
+
+    iteration++;
+    // Draw and Update Balls
     balls.forEach(ball => {
       drawBall(ball);
       detectCollision(ball);
       checkBoundaries(ball);
       updateBall(ball);
     });
-    iteration++;
     if (iteration % 1000 === 0) console.log("Iteration:", iteration);
     if (isPlaying) {
       animationFrameId = requestAnimationFrame(render);
     }
   }
 
-  function updateAllColors() {
-    balls[0].color = nightColor;
-    balls[1].color = dayColor;
-    updateBackground();
-  }
-
-  function handleDayColorChange(e) {
-    dayColor = e.target.value;
-    updateAllColors();
-  }
-
-  function handleNightColorChange(e) {
-    nightColor = e.target.value;
-    updateAllColors();
-  }
-
+  resetGame();
   configBtn.addEventListener("click", toggleConfigPanel);
   resetBtn.addEventListener("click", resetGame);
   playPauseBtn.addEventListener("click", togglePlayPause);
-  dayColorInput.addEventListener("input", handleDayColorChange);
-  nightColorInput.addEventListener("input", handleNightColorChange);
-
-  updateBackground();
   animationFrameId = requestAnimationFrame(render);
+  scoreToggleBtn.addEventListener("click", () => {
+    scorePanel.classList.toggle("collapsed");
+    // Change button symbol based on state
+    scoreToggleBtn.textContent = scorePanel.classList.contains("collapsed") ? "+" : "−";
+  });
 </script>
 </body>
 </html>
